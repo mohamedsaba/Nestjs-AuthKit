@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Agentic / Meta files
+Plan.md
+SKILL.md
+.claude/
+.gemini/
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.*

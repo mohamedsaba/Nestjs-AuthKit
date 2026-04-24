@@ -1,0 +1,1 @@
+export const AUTH_KIT_OPTIONS = Symbol('AUTH_KIT_OPTIONS');
