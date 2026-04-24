@@ -17,7 +17,7 @@ Unlike simple JWT implementations, AuthKit focuses on the "Day 2" problems of au
 ## Installation
 
 ```bash
-npm install nestjs-authkit
+npm i @mohamedsaba/nestjs-authkit
 ```
 
 *Note: This library requires an active Redis instance for session management.*
