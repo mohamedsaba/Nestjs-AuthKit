@@ -13,8 +13,8 @@ describe('AuthKitGuard', () => {
 
   const mockOptions = {
     jwt: {
-      accessSecret: 'secret',
-      refreshSecret: 'refresh',
+      accessSecret: 'a]3Fj$kL9!mNpQ2rStUvWxYz0123456',
+      refreshSecret: 'b]4Gk$lM0!nOrP3sTuVwXyZa1234567',
       accessTtl: '15m',
       refreshTtl: '7d',
     },
@@ -102,9 +102,9 @@ describe('AuthKitGuard', () => {
 
   it('should verify token and check user blocklist', async () => {
     reflector.getAllAndOverride = jest.fn().mockReturnValue(false);
-    redisMock.get.mockResolvedValue(null); // Not blocked
+    redisMock.get.mockResolvedValue(null);
     jwtService.verify = jest.fn().mockReturnValue({ sub: 'user-1' });
-    
+
     const request = {
       headers: {
         authorization: 'Bearer valid-token',

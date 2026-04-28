@@ -2,11 +2,10 @@ import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AUTH_KIT_OPTIONS } from './constants';
 import { AuthKitOptions } from './interfaces/auth-kit-options.interface';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { Redis } from 'ioredis';
 import { generateSecret, generateURI, verify } from 'otplib';
 import { createHash } from 'crypto';
-import { UserRegistrationDto } from './dtos/user-registration.dto';
 
 @Injectable()
 export class AuthKitService {
@@ -16,13 +15,9 @@ export class AuthKitService {
     private jwtService: JwtService,
   ) {}
 
-  async register(payload: UserRegistrationDto) {
-    return this.login(payload.email, payload.role);
-  }
-
-  async login(userId: string, role: string) {
+  async createTokenPair(userId: string, role: string) {
     const payload = { sub: userId, role };
-    const jti = uuidv4();
+    const jti = randomUUID();
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.options.jwt.accessSecret,
@@ -40,11 +35,9 @@ export class AuthKitService {
     );
 
     const ttl = this.parseToSeconds(this.options.jwt.refreshTtl);
-    
-    // Store valid refresh token state
+
     await this.redis.set(`rt:${userId}:${jti}`, 'valid', 'EX', ttl);
-    
-    // Add JTI to the user's token family set (avoiding KEYS in the future)
+
     await this.redis.sadd(`rt:family:${userId}`, jti);
     await this.redis.expire(`rt:family:${userId}`, ttl);
 
@@ -61,11 +54,10 @@ export class AuthKitService {
       const { sub, role, jti } = decoded;
       const redisKey = `rt:${sub}:${jti}`;
       const familyKey = `rt:family:${sub}`;
-      
+
       const tokenState = await this.redis.get(redisKey);
 
       if (tokenState === 'used') {
-        // Token reuse detected! Invalidate the whole family.
         const jtis = await this.redis.smembers(familyKey);
         if (jtis.length > 0) {
           const keysToDelete = jtis.map(id => `rt:${sub}:${id}`);
@@ -76,7 +68,6 @@ export class AuthKitService {
 
       if (!tokenState) throw new UnauthorizedException('Invalid refresh token.');
 
-      // Mark current token as used
       await this.redis.set(
         redisKey,
         'used',
@@ -84,7 +75,7 @@ export class AuthKitService {
         this.parseToSeconds(this.options.jwt.refreshTtl),
       );
 
-      return this.login(sub, role);
+      return this.createTokenPair(sub, role);
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -96,9 +87,9 @@ export class AuthKitService {
       `blocklist:user:${userId}`,
       'revoked',
       'EX',
-      this.parseToSeconds(this.options.jwt.accessTtl),
+      this.parseToSeconds(this.options.jwt.refreshTtl),
     );
-    
+
     const familyKey = `rt:family:${userId}`;
     const jtis = await this.redis.smembers(familyKey);
     if (jtis.length > 0) {
@@ -150,14 +141,14 @@ export class AuthKitService {
     }
     const value = parseInt(match[1], 10);
     const unit = match[2];
-    
+
     const multipliers = {
       s: 1,
       m: 60,
       h: 3600,
       d: 86400,
     };
-    
+
     return value * (multipliers[unit] || 0);
   }
 }

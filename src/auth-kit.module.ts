@@ -1,4 +1,4 @@
-import { Module, DynamicModule, Global, Provider } from '@nestjs/common';
+import { Module, DynamicModule, Global, Provider, OnModuleDestroy, Inject } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthKitService } from './auth-kit.service';
 import { AuthKitOptions, AuthKitModuleAsyncOptions, AuthKitOptionsFactory } from './interfaces/auth-kit-options.interface';
@@ -7,9 +7,17 @@ import Redis from 'ioredis';
 import { AuthKitGuard } from './guards/auth-kit.guard';
 import { RoleGuard } from './guards/role.guard';
 
+const MIN_SECRET_LENGTH = 32;
+
 @Global()
 @Module({})
-export class AuthKitModule {
+export class AuthKitModule implements OnModuleDestroy {
+  constructor(@Inject('REDIS_CLIENT') private redis: Redis) {}
+
+  async onModuleDestroy() {
+    await this.redis.quit();
+  }
+
   static forRoot(options: AuthKitOptions): DynamicModule {
     this.validateOptions(options);
     return {
@@ -96,7 +104,13 @@ export class AuthKitModule {
 
   private static validateOptions(options: AuthKitOptions) {
     if (!options.jwt?.accessSecret || !options.jwt?.refreshSecret) {
-      throw new Error('AuthKit Error: accessSecret and refreshSecret are required.');
+      throw new Error('AuthKit: accessSecret and refreshSecret are required.');
+    }
+    if (options.jwt.accessSecret.length < MIN_SECRET_LENGTH) {
+      throw new Error(`AuthKit: accessSecret must be at least ${MIN_SECRET_LENGTH} characters.`);
+    }
+    if (options.jwt.refreshSecret.length < MIN_SECRET_LENGTH) {
+      throw new Error(`AuthKit: refreshSecret must be at least ${MIN_SECRET_LENGTH} characters.`);
     }
   }
 
