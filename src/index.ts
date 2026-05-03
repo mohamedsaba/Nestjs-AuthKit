@@ -6,3 +6,5 @@ export { CurrentUser } from './decorators/current-user.decorator';
 export { Roles } from './decorators/roles.decorator';
 export { Public } from './decorators/public.decorator';
 export { AuthKitOptions, AuthKitModuleAsyncOptions, AuthKitOptionsFactory } from './interfaces/auth-kit-options.interface';
+export { AUTH_KIT_REDIS_CLIENT } from './constants';
+

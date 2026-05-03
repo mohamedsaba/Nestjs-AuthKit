@@ -1,13 +1,15 @@
 {
   "name": "@mohamedsaba/nestjs-authkit",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "A production-grade, drop-in authentication and authorization module for NestJS — JWT handling, refresh token rotation, Redis-backed session revocation, RBAC, and TOTP-based 2FA.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [
     "dist/src",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
+
   ],
   "scripts": {
     "build": "rimraf dist && tsc",
@@ -40,9 +42,8 @@
   },
   "dependencies": {
     "@nestjs/jwt": "^11.0.2",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
-    "uuid": "^14.0.0"
+    "ioredis": "^5.10.1",
+    "otplib": "^13.4.0"
   },
   "devDependencies": {
     "@nestjs/common": "^11.1.19",

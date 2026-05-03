@@ -1,1 +1,2 @@
 export const AUTH_KIT_OPTIONS = Symbol('AUTH_KIT_OPTIONS');
+export const AUTH_KIT_REDIS_CLIENT = Symbol('AUTH_KIT_REDIS_CLIENT');

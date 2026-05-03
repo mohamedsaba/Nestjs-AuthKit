@@ -1,6 +1,6 @@
 import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AUTH_KIT_OPTIONS } from './constants';
+import { AUTH_KIT_OPTIONS, AUTH_KIT_REDIS_CLIENT } from './constants';
 import { AuthKitOptions } from './interfaces/auth-kit-options.interface';
 import { randomUUID } from 'crypto';
 import { Redis } from 'ioredis';
@@ -11,7 +11,7 @@ import { createHash } from 'crypto';
 export class AuthKitService {
   constructor(
     @Inject(AUTH_KIT_OPTIONS) private options: AuthKitOptions,
-    @Inject('REDIS_CLIENT') private redis: Redis,
+    @Inject(AUTH_KIT_REDIS_CLIENT) private redis: Redis,
     private jwtService: JwtService,
   ) {}
 
@@ -19,11 +19,14 @@ export class AuthKitService {
     const payload = { sub: userId, role };
     const jti = randomUUID();
 
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.options.jwt.accessSecret,
-      expiresIn: this.options.jwt.accessTtl as any,
-      algorithm: this.options.jwt.algorithm,
-    });
+    const accessToken = this.jwtService.sign(
+      { ...payload, jti },
+      {
+        secret: this.options.jwt.accessSecret,
+        expiresIn: this.options.jwt.accessTtl as any,
+        algorithm: this.options.jwt.algorithm,
+      },
+    );
 
     const refreshToken = this.jwtService.sign(
       { ...payload, jti },
@@ -55,25 +58,24 @@ export class AuthKitService {
       const redisKey = `rt:${sub}:${jti}`;
       const familyKey = `rt:family:${sub}`;
 
-      const tokenState = await this.redis.get(redisKey);
+      const ttl = this.parseToSeconds(this.options.jwt.refreshTtl);
+      // Atomic Get-and-Set to prevent race conditions
+      const tokenState = await this.redis.set(redisKey, 'used', 'EX', ttl, 'GET');
 
       if (tokenState === 'used') {
+        // Token reuse detected! Revoke the entire family (session)
         const jtis = await this.redis.smembers(familyKey);
         if (jtis.length > 0) {
-          const keysToDelete = jtis.map(id => `rt:${sub}:${id}`);
-          await this.redis.del(...keysToDelete, familyKey);
+          for (const id of jtis) {
+            await this.redis.set(`blocklist:jti:${id}`, 'revoked', 'EX', ttl);
+          }
         }
+        await this.revokeSession(sub);
         throw new UnauthorizedException('Token reuse detected. Session revoked.');
       }
 
       if (!tokenState) throw new UnauthorizedException('Invalid refresh token.');
 
-      await this.redis.set(
-        redisKey,
-        'used',
-        'EX',
-        this.parseToSeconds(this.options.jwt.refreshTtl),
-      );
 
       return this.createTokenPair(sub, role);
     } catch (e) {
@@ -134,21 +136,43 @@ export class AuthKitService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private parseToSeconds(ttl: string): number {
-    const match = ttl.match(/^(\d+)([smhd])$/);
-    if (!match) {
-      throw new Error(`Invalid TTL format: ${ttl}. Expected format: '15m', '1h', etc.`);
-    }
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
+  private parseToSeconds(ttl: string | number): number {
+    if (typeof ttl === 'number') return Math.floor(ttl);
 
-    const multipliers = {
+    // Support 'ms' style strings without the dependency
+    const match = ttl.match(/^(\d+)\s*(ms|s|m|h|d|w|y|seconds?|minutes?|hours?|days?|weeks?|years?)$/i);
+    if (!match) {
+      throw new Error(`Invalid TTL format: ${ttl}. Expected format: '15m', '10 hours', etc.`);
+    }
+
+    const value = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+
+    const multipliers: Record<string, number> = {
+      ms: 0.001,
       s: 1,
+      sec: 1,
+      second: 1,
+      seconds: 1,
       m: 60,
+      min: 60,
+      minute: 60,
+      minutes: 60,
       h: 3600,
+      hour: 3600,
+      hours: 3600,
       d: 86400,
+      day: 86400,
+      days: 86400,
+      w: 604800,
+      week: 604800,
+      weeks: 604800,
+      y: 31536000,
+      year: 31536000,
+      years: 31536000,
     };
 
-    return value * (multipliers[unit] || 0);
+    const multiplier = multipliers[unit] || multipliers[unit.replace(/s$/, '')] || 0;
+    return Math.floor(value * multiplier);
   }
 }

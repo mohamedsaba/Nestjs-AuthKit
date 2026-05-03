@@ -6,13 +6,14 @@ import { AUTH_KIT_OPTIONS } from './constants';
 import Redis from 'ioredis';
 import { AuthKitGuard } from './guards/auth-kit.guard';
 import { RoleGuard } from './guards/role.guard';
+import { AUTH_KIT_REDIS_CLIENT } from './constants';
 
 const MIN_SECRET_LENGTH = 32;
 
 @Global()
 @Module({})
 export class AuthKitModule implements OnModuleDestroy {
-  constructor(@Inject('REDIS_CLIENT') private redis: Redis) {}
+  constructor(@Inject(AUTH_KIT_REDIS_CLIENT) private redis: Redis) {}
 
   async onModuleDestroy() {
     await this.redis.quit();
@@ -38,7 +39,7 @@ export class AuthKitModule implements OnModuleDestroy {
         AuthKitGuard,
         RoleGuard,
         JwtModule,
-        'REDIS_CLIENT',
+        AUTH_KIT_REDIS_CLIENT,
         AUTH_KIT_OPTIONS,
       ],
     };
@@ -60,7 +61,7 @@ export class AuthKitModule implements OnModuleDestroy {
         AuthKitGuard,
         RoleGuard,
         JwtModule,
-        'REDIS_CLIENT',
+        AUTH_KIT_REDIS_CLIENT,
         AUTH_KIT_OPTIONS,
       ],
     };
@@ -116,13 +117,28 @@ export class AuthKitModule implements OnModuleDestroy {
 
   private static createRedisProvider(): Provider {
     return {
-      provide: 'REDIS_CLIENT',
+      provide: AUTH_KIT_REDIS_CLIENT,
       useFactory: (options: AuthKitOptions) => {
-        return new Redis({
+        const client = new Redis({
           host: options.redis.host,
           port: options.redis.port,
           password: options.redis.password,
+          retryStrategy: (times: number) => {
+            const delay = Math.min(times * 50, 2000);
+            return delay;
+          },
+          maxRetriesPerRequest: 3,
         });
+
+        client.on('error', (err) => {
+          console.error(`AuthKit: Redis connection error: ${err.message}`);
+        });
+
+        client.on('connect', () => {
+          console.log('AuthKit: Redis client connected.');
+        });
+
+        return client;
       },
       inject: [AUTH_KIT_OPTIONS],
     };

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthKitService } from '../src/auth-kit.service';
 import { JwtService } from '@nestjs/jwt';
-import { AUTH_KIT_OPTIONS } from '../src/constants';
+import { AUTH_KIT_OPTIONS, AUTH_KIT_REDIS_CLIENT } from '../src/constants';
 import { UnauthorizedException } from '@nestjs/common';
 
 jest.mock('otplib', () => ({
@@ -53,7 +53,7 @@ describe('AuthKitService', () => {
           useValue: mockOptions,
         },
         {
-          provide: 'REDIS_CLIENT',
+          provide: AUTH_KIT_REDIS_CLIENT,
           useValue: redisMock,
         },
       ],
@@ -92,27 +92,28 @@ describe('AuthKitService', () => {
   describe('refreshTokens', () => {
     it('should rotate tokens if valid', async () => {
       jwtService.verify = jest.fn().mockReturnValue({ sub: 'user-1', role: 'admin', jti: 'jti-1' });
-      redisMock.get.mockResolvedValue('valid');
+      redisMock.set.mockResolvedValue('valid'); // SET ... GET returns 'valid'
       jest.spyOn(service, 'createTokenPair').mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt' });
 
       const result = await service.refreshTokens('old-rt');
 
       expect(result).toEqual({ accessToken: 'new-at', refreshToken: 'new-rt' });
-      expect(redisMock.set).toHaveBeenCalledWith('rt:user-1:jti-1', 'used', 'EX', 604800);
+      expect(redisMock.set).toHaveBeenCalledWith('rt:user-1:jti-1', 'used', 'EX', 604800, 'GET');
     });
 
-    it('should detect reuse and revoke family', async () => {
+    it('should detect reuse and revoke session', async () => {
       jwtService.verify = jest.fn().mockReturnValue({ sub: 'user-1', role: 'admin', jti: 'jti-1' });
-      redisMock.get.mockResolvedValue('used');
+      redisMock.set.mockResolvedValue('used'); // SET ... GET returns 'used'
       redisMock.smembers.mockResolvedValue(['jti-1', 'jti-2']);
+      jest.spyOn(service, 'revokeSession');
 
       await expect(service.refreshTokens('stolen-rt')).rejects.toThrow(UnauthorizedException);
-      expect(redisMock.del).toHaveBeenCalledWith('rt:user-1:jti-1', 'rt:user-1:jti-2', 'rt:family:user-1');
+      expect(service.revokeSession).toHaveBeenCalledWith('user-1');
     });
 
     it('should throw if token not found in redis', async () => {
       jwtService.verify = jest.fn().mockReturnValue({ sub: 'user-1', role: 'admin', jti: 'jti-1' });
-      redisMock.get.mockResolvedValue(null);
+      redisMock.set.mockResolvedValue(null);
 
       await expect(service.refreshTokens('invalid-rt')).rejects.toThrow(UnauthorizedException);
     });

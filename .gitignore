@@ -14,10 +14,13 @@ yarn-error.log*
 # Agentic / Meta files
 Plan.md
 SKILL.md
+STRATEGIC_AUDIT_AND_ROADMAP.md
+MARKETING_ARTICLE.md
 .claude/
 .gemini/
 .idea/
 .vscode/
+
 
 # Environment
 .env

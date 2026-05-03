@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Inject } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { AUTH_KIT_OPTIONS } from '../constants';
+import { AUTH_KIT_OPTIONS, AUTH_KIT_REDIS_CLIENT } from '../constants';
 import { AuthKitOptions } from '../interfaces/auth-kit-options.interface';
 import { Redis } from 'ioredis';
 import { createHash } from 'crypto';
@@ -13,7 +13,7 @@ export class AuthKitGuard implements CanActivate {
     private jwtService: JwtService,
     private reflector: Reflector,
     @Inject(AUTH_KIT_OPTIONS) private options: AuthKitOptions,
-    @Inject('REDIS_CLIENT') private redis: Redis,
+    @Inject(AUTH_KIT_REDIS_CLIENT) private redis: Redis,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,9 +38,15 @@ export class AuthKitGuard implements CanActivate {
         algorithms: this.options.jwt.algorithm ? [this.options.jwt.algorithm] : undefined,
       });
 
-      // 2. Check User-level Blocklist
+      // 2. Check JTI-level Blocklist (Revocation by Family/Session)
+      if (payload.jti) {
+        const isJtiBlocked = await this.redis.get(`blocklist:jti:${payload.jti}`);
+        if (isJtiBlocked) throw new UnauthorizedException('Session revoked');
+      }
+
+      // 3. Check User-level Blocklist
       const isUserBlocked = await this.redis.get(`blocklist:user:${payload.sub}`);
-      if (isUserBlocked) throw new UnauthorizedException('Session revoked');
+      if (isUserBlocked) throw new UnauthorizedException('User access revoked');
 
       request.user = payload;
       return true;

@@ -7,13 +7,15 @@ This library manages the **token layer** of authentication. Your application is 
 ## Key Features
 
 - **Advanced Token Lifecycle**: Access and Refresh tokens with "Refresh Token Family" rotation.
-- **Automatic Reuse Detection**: Detects refresh token reuse (indicating potential theft) and invalidates the entire session family.
+- **Atomic Reuse Detection**: Uses atomic Redis operations to prevent race conditions during high-concurrency refresh attempts.
+- **Family-Wide Revocation**: Detects token reuse (indicating theft) and instantly invalidates every associated Access Token and Refresh Token via JTI tracking.
 - **Instant Revocation**: Revoke specific tokens or terminate all sessions for a user via Redis.
+- **Enterprise RBAC**: Role-Based Access Control supports both single string roles and multi-role arrays.
+- **Human-Readable TTL**: Configure expirations using intuitive strings like `'10 hours'`, `'3 weeks'`, or `'15m'`.
 - **Native 2FA Support**: Generate TOTP secrets/URIs and verify codes for Google Authenticator/Authy.
-- **Performance Optimized**: Uses Redis Sets and SHA256-hashed blocklists for fast lookups.
-- **Flexible Access Control**: Decorators for Role-Based Access Control (RBAC) and public route exclusion.
-- **Graceful Shutdown**: Redis connections are properly closed on application shutdown.
-- **Async Configuration**: Fully compatible with NestJS `ConfigService` via `forRootAsync`.
+- **Redis Resilience**: Built-in exponential backoff retry strategy and connection state observability.
+- **Zero Namespace Collisions**: Exports the Redis client using a unique `Symbol` (`AUTH_KIT_REDIS_CLIENT`).
+
 
 ## Installation
 

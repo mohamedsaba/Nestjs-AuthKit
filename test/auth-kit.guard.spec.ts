@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthKitGuard } from '../src/guards/auth-kit.guard';
 import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
-import { AUTH_KIT_OPTIONS } from '../src/constants';
+import { AUTH_KIT_OPTIONS, AUTH_KIT_REDIS_CLIENT } from '../src/constants';
 import { UnauthorizedException } from '@nestjs/common';
 
 describe('AuthKitGuard', () => {
@@ -45,7 +45,7 @@ describe('AuthKitGuard', () => {
           useValue: mockOptions,
         },
         {
-          provide: 'REDIS_CLIENT',
+          provide: AUTH_KIT_REDIS_CLIENT,
           useValue: redisMock,
         },
       ],
